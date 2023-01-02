@@ -1,0 +1,28 @@
+[project]
+name = "django-payments-mollie"
+description = "Mollie integration for django-payments"
+readme = "README.md"
+requires-python = ">=3.7"
+license = { file = "LICENSE.txt" }
+keywords = []
+authors = [
+  { name = "Four Digits", email = "info@fourdigits.nl" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = []
+dynamic = ["version"]
+
+[project.urls]
+Documentation = "https://github.com/fourdigits/django-payments-mollie#readme"
+Issues = "https://github.com/fourdigits/django-payments-mollie/issues"
+Source = "https://github.com/fourdigits/django-payments-mollie"
