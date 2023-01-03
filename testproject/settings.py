@@ -49,3 +49,21 @@ DATABASES = {
 }
 TIME_ZONE = "UTC"
 USE_TZ = True
+
+######################################
+# Settings for django-payments below #
+######################################
+
+INSTALLED_APPS += ["payments", "testproject.testapp"]
+PAYMENT_HOST = "localhost:8000"
+PAYMENT_USES_SSL = False
+PAYMENT_MODEL = "testapp.Payment"
+PAYMENT_VARIANTS = {
+    "mollie": (
+        "django_payments_mollie.MollieProvider",
+        {
+            "token": "access_test",
+            "testmode": True,
+        },
+    )
+}
