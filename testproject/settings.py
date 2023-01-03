@@ -49,6 +49,7 @@ DATABASES = {
 }
 TIME_ZONE = "UTC"
 USE_TZ = True
+STATIC_URL = "static/"
 
 ######################################
 # Settings for django-payments below #
@@ -62,7 +63,7 @@ PAYMENT_VARIANTS = {
     "mollie": (
         "django_payments_mollie.MollieProvider",
         {
-            "token": "access_test",
+            "access_token": "access_test",
             "testmode": True,
         },
     )

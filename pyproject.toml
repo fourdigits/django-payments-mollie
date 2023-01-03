@@ -38,6 +38,8 @@ test = [
   "pytest-cov",
   "pytest-django",
   "dj_database_url",
+  "django-webtest",
+  "responses",
 ]
 
 [project.urls]
