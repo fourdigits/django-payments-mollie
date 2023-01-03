@@ -51,3 +51,20 @@ Source = "https://github.com/fourdigits/django-payments-mollie"
 DJANGO_SETTINGS_MODULE = "testproject.test_settings"
 pythonpath = ". testproject"
 addopts = "--cov=django_payments_mollie/ --cov-branch --cov-report=term --cov-report=xml"
+
+[tool.isort]
+profile = "black"
+src_paths = ["django_payments_mollie", "tests", "testproject"]
+
+[tool.mypy]
+strict = true
+
+[[tool.mypy.overrides]]
+# Parts of django-payments are typed, but no py.typed marker
+module = "payments.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Parts of mollie-api-python are typed, but no py.typed marker
+module = "mollie.*"
+ignore_missing_imports = true
