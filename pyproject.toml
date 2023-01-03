@@ -47,4 +47,5 @@ Source = "https://github.com/fourdigits/django-payments-mollie"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "testproject.test_settings"
+pythonpath = ". testproject"
 addopts = "--cov=django_payments_mollie/ --cov-branch --cov-report=term --cov-report=xml"
