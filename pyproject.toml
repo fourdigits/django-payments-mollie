@@ -32,9 +32,12 @@ dynamic = ["version"]
 [project.optional-dependencies]
 dev = [
   "flit",
+]
+test = [
   "pytest",
   "pytest-cov",
   "pytest-django",
+  "dj_database_url",
 ]
 
 [project.urls]
@@ -43,5 +46,5 @@ Issues = "https://github.com/fourdigits/django-payments-mollie/issues"
 Source = "https://github.com/fourdigits/django-payments-mollie"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "testproject.settings"
+DJANGO_SETTINGS_MODULE = "testproject.test_settings"
 addopts = "--cov=django_payments_mollie/ --cov-branch --cov-report=term --cov-report=xml"
