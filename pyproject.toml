@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
   "django-payments >=1.0.0",
-  "mollie-api-python >=3.0.0",
+  "mollie-api-python >=3.1.0",
 ]
 dynamic = ["version"]
 
@@ -50,7 +50,7 @@ Source = "https://github.com/fourdigits/django-payments-mollie"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "testproject.test_settings"
 pythonpath = ". testproject"
-addopts = "--cov=django_payments_mollie/ --cov-branch --cov-report=term --cov-report=xml"
+addopts = "--cov=django_payments_mollie/ --cov-branch --cov-report=term-missing --cov-report=xml"
 
 [tool.isort]
 profile = "black"
@@ -62,9 +62,4 @@ strict = true
 [[tool.mypy.overrides]]
 # Parts of django-payments are typed, but no py.typed marker
 module = "payments.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-# Parts of mollie-api-python are typed, but no py.typed marker
-module = "mollie.*"
 ignore_missing_imports = true

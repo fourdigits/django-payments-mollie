@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from django.utils.translation import gettext_lazy as _
 from mollie.api.client import Client as MollieClient
@@ -11,7 +11,9 @@ from payments.models import BasePayment
 Payment = get_payment_model()
 
 
-class MollieProvider(BasicProvider):
+class MollieProvider(
+    BasicProvider  # type: ignore[misc] # django-payments types are unavailable
+):
     """
     Django-payments provider class for Mollie.
     """
@@ -36,7 +38,7 @@ class MollieProvider(BasicProvider):
         elif access_token:
             self.client.set_access_token(access_token)
 
-    def get_form(self, payment: BasePayment, data: Optional = None):
+    def get_form(self, payment: BasePayment, data: Any = None) -> None:
         """
         Render the form that we show when creating a new payment.
 
@@ -73,14 +75,11 @@ class MollieProvider(BasicProvider):
         }
 
         try:
-            resp = self.client.payments.create(payload)
+            mollie_payment = self.client.payments.create(payload)
         except MollieError as exc:
             raise PaymentError(
                 _("Failed to create payment"),
                 gateway_message=str(exc),
             )
 
-        # Update our local payment
-        Payment.objects.filter(id=payment.id).update(transaction_id=resp.id)
-
-        return resp
+        return mollie_payment  # type: ignore[no-any-return]  # upstream types as Any
