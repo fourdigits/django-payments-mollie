@@ -4,7 +4,7 @@ from http import HTTPStatus
 
 import pytest
 from django.urls import reverse
-from payments import get_payment_model
+from payments import get_payment_model, PaymentStatus
 
 pytestmark = pytest.mark.django_db
 
@@ -29,7 +29,7 @@ def test_create_payment():
         customer_ip_address="127.0.0.1",
     )
 
-    assert payment.status == "waiting"
+    assert payment.status == PaymentStatus.WAITING
     assert payment.total == Decimal(120)
     assert payment.captured_amount == "0.0"
 
@@ -59,3 +59,4 @@ def test_create_payment_submits_data_to_mollie(django_app, responses):
     assert (
         payment.transaction_id == "tr_7UhSN1zuXS"
     ), "Payment id from Mollie should be saved"
+    assert payment.status == PaymentStatus.INPUT, "Status should be updated"

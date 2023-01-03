@@ -50,6 +50,12 @@ class MollieProvider(
         """
         mollie_payment = self.create_remote_payment(payment)
 
+        # Update our local payment
+        Payment.objects.filter(id=payment.id).update(transaction_id=mollie_payment.id)
+
+        # Update payment status
+        payment.change_status(PaymentStatus.INPUT)
+
         # Send the user to Mollie for further payment
         raise RedirectNeeded(mollie_payment.checkout_url)
 
