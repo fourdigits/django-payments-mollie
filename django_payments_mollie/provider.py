@@ -19,7 +19,6 @@ class MollieProvider(
     """
 
     client: MollieClient
-    testmode: bool
     capture: bool
 
     def __init__(
@@ -30,13 +29,15 @@ class MollieProvider(
         capture: bool = False,
     ) -> None:
         self.client = MollieClient()
-        self.testmode = testmode
         self.capture = capture
 
         if api_key:
             self.client.set_api_key(api_key)
         elif access_token:
             self.client.set_access_token(access_token)
+
+        if testmode:
+            self.client.set_testmode(testmode)
 
     def get_form(self, payment: BasePayment, data: Any = None) -> None:
         """
