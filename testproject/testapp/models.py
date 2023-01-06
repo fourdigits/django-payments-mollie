@@ -1,16 +1,17 @@
 from decimal import Decimal
 from typing import Iterable
 
+from django.urls import reverse
 from payments import PurchasedItem
 from payments.models import BasePayment
 
 
 class Payment(BasePayment):
     def get_failure_url(self) -> str:
-        return f"http://example.com/payments/{self.pk}/failure"
+        return reverse("payment-failure", kwargs={"payment_id": self.id})
 
     def get_success_url(self) -> str:
-        return f"http://example.com/payments/{self.pk}/success"
+        return reverse("payment-success", kwargs={"payment_id": self.id})
 
     def get_purchased_items(self) -> Iterable[PurchasedItem]:
         yield PurchasedItem(

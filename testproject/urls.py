@@ -11,4 +11,16 @@ urlpatterns = [
         testapp_views.payment_details,
         name="payment-details",
     ),
+    # Below paths are for manual testing
+    path("", testapp_views.payment_start, name="payment-start"),
+    path(
+        "success/<int:payment_id>",
+        testapp_views.payment_success,
+        name="payment-success",
+    ),
+    path(
+        "failure/<int:payment_id>",
+        testapp_views.payment_failure,
+        name="payment-failure",
+    ),
 ]
