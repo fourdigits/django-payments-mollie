@@ -159,6 +159,7 @@ class MollieProvider(
         try:
             mollie_payment = self.client.payments.create(payload)
         except MollieError as exc:
+            payment.change_status(PaymentStatus.ERROR, str(exc))
             raise PaymentError(
                 _("Failed to create payment"),
                 gateway_message=str(exc),
@@ -167,8 +168,17 @@ class MollieProvider(
         return mollie_payment  # type: ignore[no-any-return]  # upstream types as Any
 
     def retrieve_remote_payment(self, payment: BasePayment) -> MolliePayment:
+        """Retrieve an existing payment at Mollie, or raise a PayemntError"""
         if not payment.transaction_id:
             raise PaymentError(_("Mollie payment id is unknown"))
 
-        mollie_payment = self.client.payments.get(payment.transaction_id)
+        try:
+            mollie_payment = self.client.payments.get(payment.transaction_id)
+        except MollieError as exc:
+            payment.change_status(PaymentStatus.ERROR, str(exc))
+            raise PaymentError(
+                _("Failed to retrieve payment"),
+                gateway_message=str(exc),
+            )
+
         return mollie_payment

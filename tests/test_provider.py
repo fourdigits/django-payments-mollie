@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import pytest
-from payments import PaymentStatus
+from payments import PaymentError, PaymentStatus
 from payments.core import provider_factory
 
 from .factories import PaymentFactory
@@ -65,3 +65,35 @@ def test_process_data_updates_payment_after_unknown_status(responses):
     assert payment.message == "Mollie returned unexpected status 'hoeba'"
     assert payment.captured_amount == Decimal(0)
     assert '"status": "hoeba"' in payment.extra_data
+
+
+def test_provider_updates_payment_upon_create_api_failure(responses):
+
+    provider = provider_factory("mollie")
+    payment = PaymentFactory()
+
+    with pytest.raises(PaymentError):
+        provider.create_remote_payment(payment)
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.ERROR
+    assert (
+        "Unable to communicate with Mollie: Connection refused by Responses"
+        in payment.message
+    )
+
+
+def test_provider_updates_payment_upon_retrieve_api_failure(responses):
+
+    provider = provider_factory("mollie")
+    payment = PaymentFactory(submitted=True)
+
+    with pytest.raises(PaymentError):
+        provider.retrieve_remote_payment(payment)
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.ERROR
+    assert (
+        "Unable to communicate with Mollie: Connection refused by Responses"
+        in payment.message
+    )
