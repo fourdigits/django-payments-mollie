@@ -19,14 +19,13 @@ class RequestsMock(responses_lib.RequestsMock):
         """
         Add support for some shortcuts that we use a lot
 
-        Allow the `json` argument to receive a
+        Allow the `mock_json` argument to receive a filename for a mock
+        response from the `mock_reponses` directory.
         """
-        json_kwarg = kwargs.get("json")
-        if isinstance(json_kwarg, str):
-            # Read a mocked_response file and use that as JSON body
-            filename = json_kwarg
+        mock_json = kwargs.pop("mock_json", None)
+        if mock_json:
             file = (
-                Path(__file__).resolve().parent / "mock_responses" / f"{filename}.json"
+                Path(__file__).resolve().parent / "mock_responses" / f"{mock_json}.json"
             )
             with file.open() as fh:
                 payload = json.load(fh)
@@ -34,7 +33,13 @@ class RequestsMock(responses_lib.RequestsMock):
 
         return super().add(method, url, body, adding_headers, *args, **kwargs)
 
+    delete = partialmethod(add, "DELETE")
+    get = partialmethod(add, "GET")
+    head = partialmethod(add, "HEAD")
+    options = partialmethod(add, "OPTIONS")
+    patch = partialmethod(add, "PATCH")
     post = partialmethod(add, "POST")
+    put = partialmethod(add, "PUT")
 
 
 @pytest.fixture

@@ -1,5 +1,7 @@
 from typing import Any, Optional
 
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
 from django.utils.translation import gettext_lazy as _
 from mollie.api.client import Client as MollieClient
 from mollie.api.error import Error as MollieError
@@ -9,6 +11,21 @@ from payments.core import BasicProvider
 from payments.models import BasePayment
 
 Payment = get_payment_model()
+
+
+class MolliePaymentStatus:
+    """
+    Mollie payment statuses
+    See https://docs.mollie.com/payments/status-changes#every-possible-payment-status
+    """
+
+    OPEN: str = "open"
+    CANCELED: str = "canceled"
+    PENDING: str = "pending"
+    AUTHORIZED: str = "authorized"
+    EXPIRED: str = "expired"
+    FAILED: str = "failed"
+    PAID: str = "paid"
 
 
 class MollieProvider(
@@ -60,6 +77,39 @@ class MollieProvider(
         # Send the user to Mollie for further payment
         raise RedirectNeeded(mollie_payment.checkout_url)
 
+    def process_data(self, payment: BasePayment, request: HttpRequest) -> HttpResponse:
+        """
+        Process callback request from a payment provider.
+
+        This method should handle checking the status of the payment, and
+        update the ``payment`` instance.
+        If a client is redirected here after making a payment, then this view
+        should redirect them to either :meth:`Payment.get_success_url` or
+        :meth:`Payment.get_failure_url`.
+
+        Note: This method receives both customer browser requests (redirects from
+        the PSP) as webhook requests by the PSP without direct user interaction.
+        Webhook requests are not yet implemented.
+        """
+        mollie_payment = self.retrieve_remote_payment(payment)
+
+        next_status = None
+        payment_updates = {}
+        if mollie_payment.status == MolliePaymentStatus.PAID:
+            next_status = PaymentStatus.CONFIRMED
+            payment_updates["captured_amount"] = payment.total
+
+        if next_status:
+            payment.change_status(next_status)
+
+        if payment_updates:
+            Payment.objects.filter(id=payment.id).update(**payment_updates)
+
+        if next_status in (PaymentStatus.CONFIRMED, PaymentStatus.PREAUTH):
+            return redirect(payment.get_success_url())
+        else:
+            return redirect(payment.get_failure_url())
+
     def create_remote_payment(self, payment: BasePayment) -> MolliePayment:
         """Create a payment at Mollie, or raise a PaymentError"""
         if payment.status != PaymentStatus.WAITING:
@@ -90,3 +140,10 @@ class MollieProvider(
             )
 
         return mollie_payment  # type: ignore[no-any-return]  # upstream types as Any
+
+    def retrieve_remote_payment(self, payment: BasePayment) -> MolliePayment:
+        if not payment.transaction_id:
+            raise PaymentError(_("Mollie payment id is unknown"))
+
+        mollie_payment = self.client.payments.get(payment.transaction_id)
+        return mollie_payment

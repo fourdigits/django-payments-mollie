@@ -4,7 +4,7 @@ from http import HTTPStatus
 
 import pytest
 from django.urls import reverse
-from payments import get_payment_model, PaymentStatus
+from payments import PaymentStatus, get_payment_model
 
 pytestmark = pytest.mark.django_db
 
@@ -35,7 +35,7 @@ def test_create_payment():
 
 
 def test_create_payment_submits_data_to_mollie(django_app, responses):
-    responses.post("https://api.mollie.com/v2/payments", json="payment")
+    responses.post("https://api.mollie.com/v2/payments", mock_json="payment_new")
 
     Payment = get_payment_model()
     payment = Payment.objects.create(
