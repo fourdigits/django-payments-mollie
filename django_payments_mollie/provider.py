@@ -97,6 +97,7 @@ class MollieProvider(
         next_status = None
         next_status_message = ""
         payment_updates = {"extra_data": json.dumps(mollie_payment)}
+
         if mollie_payment.status == MolliePaymentStatus.PAID:
             next_status = PaymentStatus.CONFIRMED
             payment_updates["captured_amount"] = payment.total
@@ -108,6 +109,22 @@ class MollieProvider(
         ]:
             next_status = PaymentStatus.REJECTED
             next_status_message = f"Mollie returned status '{mollie_payment.status}'"
+
+        elif mollie_payment.status in [
+            MolliePaymentStatus.OPEN,
+            MolliePaymentStatus.PENDING,
+        ]:
+            # Customer has not completed the flow at Mollie yet, or has completed
+            # the flow but Mollie has not started processing
+            pass
+
+        else:
+            # Note: AUTHORIZED is not listed above, as
+            # it never happens with Payments (only Orders).
+            next_status = PaymentStatus.ERROR
+            next_status_message = (
+                f"Mollie returned unexpected status '{mollie_payment.status}'"
+            )
 
         # Update the payment
         if next_status:

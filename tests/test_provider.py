@@ -47,3 +47,21 @@ def test_process_data_updates_payment_after_failure(responses):
     assert payment.message == "Mollie returned status 'failed'"
     assert payment.captured_amount == Decimal(0)
     assert '"status": "failed"' in payment.extra_data
+
+
+def test_process_data_updates_payment_after_unknown_status(responses):
+    responses.get(
+        "https://api.mollie.com/v2/payments/tr_12345",
+        mock_json="payment_unknown_status",
+    )
+
+    provider = provider_factory("mollie")
+    payment = PaymentFactory(submitted=True)
+    result = provider.process_data(payment, None)
+    assert "/failure/" in result.url
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.ERROR
+    assert payment.message == "Mollie returned unexpected status 'hoeba'"
+    assert payment.captured_amount == Decimal(0)
+    assert '"status": "hoeba"' in payment.extra_data
