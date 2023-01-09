@@ -94,17 +94,27 @@ class MollieProvider(
         mollie_payment = self.retrieve_remote_payment(payment)
 
         next_status = None
+        next_status_message = ""
         payment_updates = {}
         if mollie_payment.status == MolliePaymentStatus.PAID:
             next_status = PaymentStatus.CONFIRMED
             payment_updates["captured_amount"] = payment.total
 
-        if next_status:
-            payment.change_status(next_status)
+        elif mollie_payment.status in [
+            MolliePaymentStatus.CANCELED,
+            MolliePaymentStatus.EXPIRED,
+            MolliePaymentStatus.FAILED,
+        ]:
+            next_status = PaymentStatus.REJECTED
+            next_status_message = f"Mollie returned status '{mollie_payment.status}'"
 
+        # Update the payment
+        if next_status:
+            payment.change_status(next_status, next_status_message)
         if payment_updates:
             Payment.objects.filter(id=payment.id).update(**payment_updates)
 
+        # Send the customer off
         if next_status in (PaymentStatus.CONFIRMED, PaymentStatus.PREAUTH):
             return redirect(payment.get_success_url())
         else:
