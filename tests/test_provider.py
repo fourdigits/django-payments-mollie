@@ -29,6 +29,7 @@ def test_process_data_updates_payment_after_success(responses):
     payment.refresh_from_db()
     assert payment.status == PaymentStatus.CONFIRMED
     assert payment.captured_amount == payment.total
+    assert '"status": "paid"' in payment.extra_data
 
 
 def test_process_data_updates_payment_after_failure(responses):
@@ -45,3 +46,4 @@ def test_process_data_updates_payment_after_failure(responses):
     assert payment.status == PaymentStatus.REJECTED
     assert payment.message == "Mollie returned status 'failed'"
     assert payment.captured_amount == Decimal(0)
+    assert '"status": "failed"' in payment.extra_data

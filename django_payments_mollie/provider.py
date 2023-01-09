@@ -1,3 +1,4 @@
+import json
 from typing import Any, Optional
 
 from django.http import HttpRequest, HttpResponse
@@ -95,7 +96,7 @@ class MollieProvider(
 
         next_status = None
         next_status_message = ""
-        payment_updates = {}
+        payment_updates = {"extra_data": json.dumps(mollie_payment)}
         if mollie_payment.status == MolliePaymentStatus.PAID:
             next_status = PaymentStatus.CONFIRMED
             payment_updates["captured_amount"] = payment.total
