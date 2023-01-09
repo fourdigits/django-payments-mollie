@@ -37,17 +37,14 @@ class MollieProvider(
     """
 
     client: MollieClient
-    capture: bool
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         access_token: Optional[str] = None,
         testmode: bool = False,
-        capture: bool = False,
     ) -> None:
         self.client = MollieClient()
-        self.capture = capture
 
         if api_key:
             self.client.set_api_key(api_key)
