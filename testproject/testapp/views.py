@@ -35,6 +35,10 @@ def payment_start(request):
             description="Book purchase",
             total=Decimal(120),
             currency="EUR",
+            billing_address_1="Jansbinnensingel 26",
+            billing_city="Arnhem",
+            billing_postcode="6811AL",
+            billing_country_code="NL",
         )
 
         logging.warning(f"New payment created with id '{payment.id}', now redirecting")

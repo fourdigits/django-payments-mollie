@@ -1,4 +1,5 @@
 import json
+import warnings
 from decimal import Decimal
 
 import pytest
@@ -132,6 +133,7 @@ def test_provider_generates_billing_address(faker):
     }
 
 
+@pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.mark.parametrize(
     "field_to_omit", ["billing_address_1", "billing_city", "billing_country_code"]
 )
@@ -165,3 +167,24 @@ def test_provider_omits_empty_or_partial_billing_address(
     assert (
         "billingAddress" not in payload
     ), "Billing address should not be sent to Mollie"
+
+
+def test_provider_emits_warning_for_partial_billing_address(recwarn):
+    provider = provider_factory("mollie")
+    payment = PaymentFactory()
+
+    assert payment.billing_address_1 == ""
+    assert payment.billing_city == ""
+    assert payment.billing_country_code == ""
+    provider._create_mollie_billing_address(payment)
+    assert len(recwarn.list) == 0, "No warnings should be emitted"
+
+    # Add a partial billing address
+    payment.billing_address_1 = "some billing address"
+    payment.save()
+    provider._create_mollie_billing_address(payment)
+    assert len(recwarn.list) == 1, "One warning should be emitted"
+    assert (
+        str(recwarn.list[-1].message)
+        == "Some billing address details are set in the payment object, but not enough to fulfill Mollie requirements, omitting the billing address from the payment request"  # noqa: E501
+    )

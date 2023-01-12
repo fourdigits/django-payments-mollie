@@ -1,4 +1,5 @@
 import json
+import warnings
 from typing import Any, Dict, Optional
 
 from django.http import HttpRequest, HttpResponse
@@ -190,19 +191,35 @@ class MollieProvider(
         """
         Generate a Billing adress object from the payment data.
 
-        Note: some fields are required by the API when providing a billing address.
-        If you don't provide the required field 'billing_address_1', 'city'
-        and 'country_code', no billing address will be generated or submitted to Mollie.
+        Note: some address details are required by the Mollie API when providing a
+        billing address. If you don't provide all required details (e.g. address,
+        city and country code), no billing address will be generated or submitted
+        to Mollie.
+
         See Mollie docs for details:
         https://docs.mollie.com/overview/common-data-types#address-object
         """
         result = {}
 
+        # Check if all required address details are available
         if not (
             payment.billing_address_1
             and payment.billing_city
             and payment.billing_country_code
         ):
+            # Check if some address details are set
+            if (
+                payment.billing_address_1
+                or payment.billing_city
+                or payment.billing_country_code
+            ):
+                warnings.warn(
+                    "Some billing address details are set in the payment object, but "
+                    "not enough to fulfill Mollie requirements, omitting the billing "
+                    "address from the payment request",
+                    UserWarning,
+                )
+
             return {}
 
         if payment.billing_address_1:
