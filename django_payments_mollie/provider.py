@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect
@@ -155,6 +155,9 @@ class MollieProvider(
             "description": payment.description,
             "redirectUrl": self.get_return_url(payment),
         }
+        billing_address = self._create_mollie_billing_address(payment)
+        if billing_address:
+            payload["billingAddress"] = billing_address
 
         try:
             mollie_payment = self.client.payments.create(payload)
@@ -182,3 +185,42 @@ class MollieProvider(
             )
 
         return mollie_payment
+
+    def _create_mollie_billing_address(self, payment: BasePayment) -> Dict[str, str]:
+        """
+        Generate a Billing adress object from the payment data.
+
+        Note: some fields are required by the API when providing a billing address.
+        If you don't provide the required field 'billing_address_1', 'city'
+        and 'country_code', no billing address will be generated or submitted to Mollie.
+        See Mollie docs for details:
+        https://docs.mollie.com/overview/common-data-types#address-object
+        """
+        result = {}
+
+        if not (
+            payment.billing_address_1
+            and payment.billing_city
+            and payment.billing_country_code
+        ):
+            return {}
+
+        if payment.billing_address_1:
+            result["streetAndNumber"] = payment.billing_address_1
+
+        if payment.billing_address_2 and result["streetAndNumber"]:
+            result["streetAndNumber"] += f" {payment.billing_address_2}"  # add a space
+
+        if payment.billing_postcode:
+            result["postalCode"] = payment.billing_postcode
+
+        if payment.billing_city:
+            result["city"] = payment.billing_city
+
+        if payment.billing_country_area:
+            result["region"] = payment.billing_country_area
+
+        if payment.billing_country_code:
+            result["country"] = payment.billing_country_code
+
+        return result
