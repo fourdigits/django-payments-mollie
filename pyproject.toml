@@ -24,7 +24,7 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-  "django-payments >=1.0.0",
+  "django-payments",
   "mollie-api-python >=3.1.0",
 ]
 dynamic = ["version"]
