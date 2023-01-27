@@ -37,9 +37,8 @@ test = [
   "pytest",
   "pytest-cov",
   "pytest-django",
+  "pytest-mock",
   "dj_database_url",
-  "django-webtest",
-  "responses",
   "factory_boy",
 ]
 

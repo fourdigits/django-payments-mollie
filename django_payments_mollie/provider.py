@@ -94,7 +94,7 @@ class MollieProvider(
 
         # Update the payment
         # TODO: Don't update if the status hasn't changed?
-        if next_status:
+        if next_status:  # pragma: no branch
             payment.change_status(next_status, next_status_message)
             if (
                 next_status == PaymentStatus.CONFIRMED

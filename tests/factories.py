@@ -2,6 +2,8 @@ import factory
 from factory.django import DjangoModelFactory
 from payments import PaymentStatus, get_payment_model
 
+from tests.test_app.models import BaseMolliePayment
+
 
 class PaymentFactory(DjangoModelFactory):
     class Meta:

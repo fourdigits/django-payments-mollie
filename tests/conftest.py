@@ -1,48 +1,34 @@
-import json
-from functools import partialmethod
-from pathlib import Path
-
 import pytest
-import responses as responses_lib
+from faker import Faker
 
-
-class RequestsMock(responses_lib.RequestsMock):
-    def add(
-        self,
-        method=None,
-        url=None,
-        body="",
-        adding_headers=None,
-        *args,
-        **kwargs,
-    ):
-        """
-        Add support for some shortcuts that we use a lot
-
-        Allow the `mock_json` argument to receive a filename for a mock
-        response from the `mock_reponses` directory.
-        """
-        mock_json = kwargs.pop("mock_json", None)
-        if mock_json:
-            file = (
-                Path(__file__).resolve().parent / "mock_responses" / f"{mock_json}.json"
-            )
-            with file.open() as fh:
-                payload = json.load(fh)
-                kwargs["json"] = payload
-
-        return super().add(method, url, body, adding_headers, *args, **kwargs)
-
-    delete = partialmethod(add, "DELETE")
-    get = partialmethod(add, "GET")
-    head = partialmethod(add, "HEAD")
-    options = partialmethod(add, "OPTIONS")
-    patch = partialmethod(add, "PATCH")
-    post = partialmethod(add, "POST")
-    put = partialmethod(add, "PUT")
+fake = Faker()
 
 
 @pytest.fixture
-def responses():
-    with RequestsMock() as rsps:
-        yield rsps
+def mollie_payment():
+    from mollie.api.objects.payment import Payment
+
+    transaction_id = f"tr_{fake.password(length=10, special_chars=False)}"
+    currency = fake.currency_code()
+    amount = fake.pydecimal(right_digits=2, min_value=1, max_value=999)
+    description = fake.sentence()
+    checkout_url = (
+        f"https://mollie.test/checkout/{fake.password(length=10,special_chars=False)}/"
+    )
+
+    data = {
+        "id": transaction_id,
+        "amount": {
+            "currency": currency,
+            "value": str(amount),
+        },
+        "status": "open",
+        "description": description,
+        "_links": {
+            "checkout": {
+                "href": checkout_url,
+                "type": "text/html",
+            },
+        },
+    }
+    return Payment(data, None)

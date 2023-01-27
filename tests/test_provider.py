@@ -1,190 +1,160 @@
-import json
-import warnings
 from decimal import Decimal
+from http import HTTPStatus
 
 import pytest
-from payments import PaymentError, PaymentStatus
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from payments import PaymentStatus, RedirectNeeded
 from payments.core import provider_factory
+
+from django_payments_mollie.facade import Facade
+from django_payments_mollie.provider import MollieProvider
 
 from .factories import PaymentFactory
 
 pytestmark = pytest.mark.django_db
 
 
-def test_get_provider_from_settings():
+def test_get_provider_from_settings(mocker):
+    # Ensure we don't get coverage for the facade from this test
+    mocker.patch("django_payments_mollie.provider.Facade.setup_with_api_key")
+
     provider = provider_factory("mollie")
+    assert isinstance(provider, MollieProvider)
+    assert provider.facade, "Facade should be initialized"
+    assert isinstance(provider.facade, Facade)
 
-    assert provider.client is not None, "Internal mollie client is unavailable"
-    assert provider.client.testmode is True, "Testmode is not adopted correctly"
+
+def test_provider_initializes_facade(mocker):
+    mocker.patch("django_payments_mollie.provider.Facade.setup_with_api_key")
+    provider = MollieProvider(api_key="test_test")
+
+    provider.facade.setup_with_api_key.assert_called_once_with("test_test")
 
 
-def test_process_data_updates_payment_after_success(responses):
-    responses.get(
-        "https://api.mollie.com/v2/payments/tr_12345", mock_json="payment_paid"
+def test_provider_get_form_creates_mollie_payment(mocker, mollie_payment):
+    mocker.patch("django_payments_mollie.provider.Facade")
+
+    provider = MollieProvider(api_key="test_test")
+    # Configure mock
+    provider.facade.create_payment.return_value = mollie_payment
+
+    payment = PaymentFactory()
+    with pytest.raises(RedirectNeeded):
+        provider.get_form(payment)
+
+    provider.facade.create_payment.assert_called_once()
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.INPUT
+    assert (
+        payment.transaction_id == mollie_payment.id
+    ), "Mollie payment ID should be saved"
+
+
+def test_provider_get_form_redirects_to_mollie(mocker, mollie_payment):
+    mocker.patch("django_payments_mollie.provider.Facade")
+
+    provider = MollieProvider(api_key="test_test")
+    # Configure mock
+    provider.facade.create_payment.return_value = mollie_payment
+
+    payment = PaymentFactory()
+    with pytest.raises(RedirectNeeded) as excinfo:
+        provider.get_form(payment)
+
+    assert excinfo.type == RedirectNeeded
+    assert str(excinfo.value) == mollie_payment.checkout_url
+
+
+def test_provider_process_data_updates_payment(mocker):
+    mocker.patch("django_payments_mollie.provider.Facade")
+
+    provider = MollieProvider(api_key="test_test")
+    # Configure mock
+    provider.facade.parse_payment_status.return_value = (
+        PaymentStatus.CONFIRMED,
+        "payment confirmed",
+        {"captured_amount": "13.37"},
     )
 
-    provider = provider_factory("mollie")
-    payment = PaymentFactory(submitted=True)
-    result = provider.process_data(payment, None)
-    assert "/success/" in result.url
+    payment = PaymentFactory()
+    request = HttpRequest()
+    request.method = "GET"
+
+    provider.process_data(payment, request)
 
     payment.refresh_from_db()
     assert payment.status == PaymentStatus.CONFIRMED
-    assert payment.captured_amount == payment.total
-    assert '"status": "paid"' in payment.extra_data
+    assert payment.message == "payment confirmed"
+    assert payment.captured_amount == Decimal("13.37")
 
 
-def test_process_data_updates_payment_after_failure(responses):
-    responses.get(
-        "https://api.mollie.com/v2/payments/tr_12345", mock_json="payment_failed"
+def test_provider_process_data_confirmed_payment_uses_own_amount(mocker):
+    """If Mollie returns no captured amount, the `payment.total` is used."""
+    mocker.patch("django_payments_mollie.provider.Facade")
+
+    provider = MollieProvider(api_key="test_test")
+    # Configure mock
+    provider.facade.parse_payment_status.return_value = (
+        PaymentStatus.CONFIRMED,
+        "",
+        {},
     )
 
-    provider = provider_factory("mollie")
-    payment = PaymentFactory(submitted=True)
-    result = provider.process_data(payment, None)
-    assert "/failure/" in result.url
+    payment = PaymentFactory(total="47")
+    request = HttpRequest()
+    request.method = "GET"
+
+    provider.process_data(payment, request)
 
     payment.refresh_from_db()
-    assert payment.status == PaymentStatus.REJECTED
-    assert payment.message == "Mollie returned status 'failed'"
-    assert payment.captured_amount == Decimal(0)
-    assert '"status": "failed"' in payment.extra_data
+    assert payment.captured_amount == Decimal("47.00")
 
 
-def test_process_data_updates_payment_after_unknown_status(responses):
-    responses.get(
-        "https://api.mollie.com/v2/payments/tr_12345",
-        mock_json="payment_unknown_status",
-    )
-
-    provider = provider_factory("mollie")
-    payment = PaymentFactory(submitted=True)
-    result = provider.process_data(payment, None)
-    assert "/failure/" in result.url
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.ERROR
-    assert payment.message == "Mollie returned unexpected status 'hoeba'"
-    assert payment.captured_amount == Decimal(0)
-    assert '"status": "hoeba"' in payment.extra_data
-
-
-def test_provider_updates_payment_upon_create_api_failure(responses):
-
-    provider = provider_factory("mollie")
-    payment = PaymentFactory()
-
-    with pytest.raises(PaymentError):
-        provider.create_remote_payment(payment)
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.ERROR
-    assert (
-        "Unable to communicate with Mollie: Connection refused by Responses"
-        in payment.message
-    )
-
-
-def test_provider_updates_payment_upon_retrieve_api_failure(responses):
-
-    provider = provider_factory("mollie")
-    payment = PaymentFactory(submitted=True)
-
-    with pytest.raises(PaymentError):
-        provider.retrieve_remote_payment(payment)
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.ERROR
-    assert (
-        "Unable to communicate with Mollie: Connection refused by Responses"
-        in payment.message
-    )
-
-
-def test_provider_generates_billing_address(faker):
-    provider = provider_factory("mollie")
-    payment = PaymentFactory()
-
-    street_address = faker.street_address()
-    building_number = faker.building_number()
-    postcode = faker.postcode()
-    city = faker.city()
-    region = "Gelderland"
-    country = faker.country()
-    country_code = faker.country_code()
-
-    payment.billing_address_1 = street_address
-    payment.billing_address_2 = building_number
-    payment.billing_postcode = postcode
-    payment.billing_city = city
-    payment.billing_country_area = region
-    payment.billing_country = country
-    payment.billing_country_code = country_code
-    payment.save()
-
-    billing_address = provider._create_mollie_billing_address(payment)
-
-    assert billing_address == {
-        "streetAndNumber": f"{street_address} {building_number}",
-        "postalCode": postcode,
-        "city": city,
-        "region": region,
-        "country": country_code,
-    }
-
-
-@pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.mark.parametrize(
-    "field_to_omit", ["billing_address_1", "billing_city", "billing_country_code"]
+    "status, redirect",
+    [
+        (PaymentStatus.CONFIRMED, "success"),
+        (PaymentStatus.PREAUTH, "success"),
+        (PaymentStatus.REJECTED, "failure"),
+        (PaymentStatus.ERROR, "failure"),
+    ],
 )
-def test_provider_omits_empty_or_partial_billing_address(
-    responses, faker, field_to_omit
-):
-    responses.post("https://api.mollie.com/v2/payments", mock_json="payment_new")
+def test_provider_process_data_returns_result_redirect(mocker, status, redirect):
+    mocker.patch("django_payments_mollie.provider.Facade")
 
-    provider = provider_factory("mollie")
-    payment = PaymentFactory()
-
-    payment.billing_address_1 = faker.street_address()
-    payment.billing_address_2 = faker.building_number()
-    payment.billing_postcode = faker.postcode()
-    payment.billing_city = faker.city()
-    payment.billing_country_area = "Gelderland"
-    payment.billing_country = faker.country()
-    payment.billing_country_code = faker.country_code()
-
-    setattr(payment, field_to_omit, "")
-    payment.save()
-
-    billing_address = provider._create_mollie_billing_address(payment)
-    assert billing_address == {}, "An empty billing address should be returned"
-
-    provider.create_remote_payment(payment)
-
-    assert len(responses.calls) == 1
-    request = responses.calls[-1].request
-    payload = json.loads(request.body)
-    assert (
-        "billingAddress" not in payload
-    ), "Billing address should not be sent to Mollie"
-
-
-def test_provider_emits_warning_for_partial_billing_address(recwarn):
-    provider = provider_factory("mollie")
-    payment = PaymentFactory()
-
-    assert payment.billing_address_1 == ""
-    assert payment.billing_city == ""
-    assert payment.billing_country_code == ""
-    provider._create_mollie_billing_address(payment)
-    assert len(recwarn.list) == 0, "No warnings should be emitted"
-
-    # Add a partial billing address
-    payment.billing_address_1 = "some billing address"
-    payment.save()
-    provider._create_mollie_billing_address(payment)
-    assert len(recwarn.list) == 1, "One warning should be emitted"
-    assert (
-        str(recwarn.list[-1].message)
-        == "Some billing address details are set in the payment object, but not enough to fulfill Mollie requirements, omitting the billing address from the payment request"  # noqa: E501
+    provider = MollieProvider(api_key="test_test")
+    # Configure mock
+    provider.facade.parse_payment_status.return_value = (
+        status,  # Set from parametrized value
+        "",
+        {},
     )
+
+    payment = PaymentFactory(total="47")
+    request = HttpRequest()
+    request.method = "GET"
+
+    result = provider.process_data(payment, request)
+    assert isinstance(result, HttpResponseRedirect)
+    assert result.url == f"https://example.com/{redirect}"
+
+
+def test_provider_process_data_webhook_request_returns_http_200(mocker):
+    mocker.patch("django_payments_mollie.provider.Facade")
+
+    provider = MollieProvider(api_key="test_test")
+    # Configure mock
+    provider.facade.parse_payment_status.return_value = (
+        PaymentStatus.CONFIRMED,
+        "",
+        {},
+    )
+
+    payment = PaymentFactory()
+    webhook_request = HttpRequest()
+    webhook_request.method = "POST"
+
+    result = provider.process_data(payment, webhook_request)
+    assert isinstance(result, HttpResponse)
+    assert result.status_code == HTTPStatus.OK
