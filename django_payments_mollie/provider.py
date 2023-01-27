@@ -1,76 +1,62 @@
-import json
-import warnings
-from typing import Any, Dict, Optional
+from typing import Any
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import redirect
-from django.utils.translation import gettext_lazy as _
-from mollie.api.client import Client as MollieClient
-from mollie.api.error import Error as MollieError
-from mollie.api.objects.payment import Payment as MolliePayment
-from payments import PaymentError, PaymentStatus, RedirectNeeded, get_payment_model
+from payments import PaymentStatus, RedirectNeeded, get_payment_model
 from payments.core import BasicProvider
 from payments.models import BasePayment
 
+from .facade import Facade
+
 Payment = get_payment_model()
-
-
-class MolliePaymentStatus:
-    """
-    Mollie payment statuses
-    See https://docs.mollie.com/payments/status-changes#every-possible-payment-status
-    """
-
-    OPEN: str = "open"
-    CANCELED: str = "canceled"
-    PENDING: str = "pending"
-    AUTHORIZED: str = "authorized"
-    EXPIRED: str = "expired"
-    FAILED: str = "failed"
-    PAID: str = "paid"
 
 
 class MollieProvider(
     BasicProvider  # type: ignore[misc] # django-payments types are unavailable
 ):
     """
-    Django-payments provider class for Mollie.
+    Django Payments provider class for Mollie.
     """
 
-    client: MollieClient
+    facade: Facade
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        access_token: Optional[str] = None,
-        testmode: bool = False,
-    ) -> None:
-        self.client = MollieClient()
+    def __init__(self, api_key: str = "") -> None:
+        """
+        Init a new provider instance.
 
-        if api_key:
-            self.client.set_api_key(api_key)
-        elif access_token:
-            self.client.set_access_token(access_token)
+        The arguments for this method are the values in the configuration dict
+        in the PAYMENT_VARIANTS definition.
+        """
+        self.facade = Facade()
+        self.facade.setup_with_api_key(api_key)
 
-        if testmode:
-            self.client.set_testmode(testmode)
+    @staticmethod
+    def update_payment(payment_id: int, **kwargs: Any) -> None:
+        """
+        Helper method to update the payment model safely.
+
+        See https://django-payments.readthedocs.io/en/latest/payment-model.html#mutating-a-payment-instance  # noqa: E501
+        """
+        Payment.objects.filter(id=payment_id).update(**kwargs)
 
     def get_form(self, payment: BasePayment, data: Any = None) -> None:
         """
-        Render the form that we show when creating a new payment.
+        Return a form that collects payment-specific data, or redirect to the PSP.
 
-        We don't need a form now, so we create the payment at Mollie,
-        and redirect the user to the remote checkout URL.
+        The form can request billing details, a specific payment method or even CC
+        details from the user. Entered Form values are returned in the `data` argument.
+        The Payment instance may be updated with the retrieved data. Then the
+        payment at Mollie can be created, and the user should be redirected
+        to the Mollie checkout.
 
-        In the future, we could implement the form to request
-        the Mollie payment method, CC details, etc
+        For now, we don't need any details, so we'll just create the Mollie payment
+        and send the user to the checkout.
         """
-        mollie_payment = self.create_remote_payment(payment)
+        return_url = self.get_return_url(payment)
+        mollie_payment = self.facade.create_payment(payment, return_url)
 
-        # Update our local payment
-        Payment.objects.filter(id=payment.id).update(transaction_id=mollie_payment.id)
-
-        # Update payment status
+        # Update the Payment
+        self.update_payment(payment.id, transaction_id=mollie_payment.id)
         payment.change_status(PaymentStatus.INPUT)
 
         # Send the user to Mollie for further payment
@@ -78,166 +64,53 @@ class MollieProvider(
 
     def process_data(self, payment: BasePayment, request: HttpRequest) -> HttpResponse:
         """
-        Process callback request from a payment provider.
+        Handle payment changes from Mollie.
 
-        This method should handle checking the status of the payment, and
-        update the ``payment`` instance.
-        If a client is redirected here after making a payment, then this view
-        should redirect them to either :meth:`Payment.get_success_url` or
-        :meth:`Payment.get_failure_url`.
+        This method is called by the endpoint that is sent to Mollie as
+        `redirectUrl` and/or `webhookUrl`. There are two types of requests:
 
-        Note: This method receives both customer browser requests (redirects from
-        the PSP) as webhook requests by the PSP without direct user interaction.
-        Webhook requests are not yet implemented.
+        1) The user has completed a payment workflow at Mollie, and returns back to
+        the application. This is typically a GET request. For this case, we need to
+        update the local payment, and finally redirect the user to the success or
+        failure URL.
+
+        2) Mollie has some updates on the payment, and calls the webhook to notify us of
+        these. This is typically a POST request. If this happens, we also need to update
+        the local payment, and then tell Mollie that we processed the webhook request
+        (i.e. return a HTTP 200).
+
+        See https://docs.mollie.com/overview/webhooks for details.
         """
-        mollie_payment = self.retrieve_remote_payment(payment)
+        allowed_methods = ["GET", "POST"]
+        if request.method not in allowed_methods:
+            return HttpResponseNotAllowed(allowed_methods)
 
-        next_status = None
-        next_status_message = ""
-        payment_updates = {"extra_data": json.dumps(mollie_payment)}
-
-        if mollie_payment.status == MolliePaymentStatus.PAID:
-            next_status = PaymentStatus.CONFIRMED
-            payment_updates["captured_amount"] = payment.total
-
-        elif mollie_payment.status in [
-            MolliePaymentStatus.CANCELED,
-            MolliePaymentStatus.EXPIRED,
-            MolliePaymentStatus.FAILED,
-        ]:
-            next_status = PaymentStatus.REJECTED
-            next_status_message = f"Mollie returned status '{mollie_payment.status}'"
-
-        elif mollie_payment.status in [
-            MolliePaymentStatus.OPEN,
-            MolliePaymentStatus.PENDING,
-        ]:
-            # Customer has not completed the flow at Mollie yet, or has completed
-            # the flow but Mollie has not started processing
-            pass
-
-        else:
-            # Note: AUTHORIZED is not listed above, as
-            # it never happens with Payments (only Orders).
-            next_status = PaymentStatus.ERROR
-            next_status_message = (
-                f"Mollie returned unexpected status '{mollie_payment.status}'"
-            )
+        mollie_payment = self.facade.retrieve_payment(payment)
+        (
+            next_status,
+            next_status_message,
+            payment_updates,
+        ) = self.facade.parse_payment_status(mollie_payment)
 
         # Update the payment
+        # TODO: Don't update if the status hasn't changed?
         if next_status:
             payment.change_status(next_status, next_status_message)
-        if payment_updates:
-            Payment.objects.filter(id=payment.id).update(**payment_updates)
-
-        # Send the customer off
-        if next_status in (PaymentStatus.CONFIRMED, PaymentStatus.PREAUTH):
-            return redirect(payment.get_success_url())
-        else:
-            return redirect(payment.get_failure_url())
-
-    def create_remote_payment(self, payment: BasePayment) -> MolliePayment:
-        """Create a payment at Mollie, or raise a PaymentError"""
-        if payment.status != PaymentStatus.WAITING:
-            raise PaymentError(_("Payment status is incorrect"))
-
-        if not payment.currency:
-            # This is a programming error
-            raise ValueError("The payment has no currency, but it is required")
-        if not payment.total:
-            # This is a programming error
-            raise ValueError("The payment has no total amount, but it is required")
-
-        payload = {
-            "amount": {
-                "currency": payment.currency,
-                "value": str(payment.total),
-            },
-            "description": payment.description,
-            "redirectUrl": self.get_return_url(payment),
-        }
-        billing_address = self._create_mollie_billing_address(payment)
-        if billing_address:
-            payload["billingAddress"] = billing_address
-
-        try:
-            mollie_payment = self.client.payments.create(payload)
-        except MollieError as exc:
-            payment.change_status(PaymentStatus.ERROR, str(exc))
-            raise PaymentError(
-                _("Failed to create payment"),
-                gateway_message=str(exc),
-            )
-
-        return mollie_payment  # type: ignore[no-any-return]  # upstream types as Any
-
-    def retrieve_remote_payment(self, payment: BasePayment) -> MolliePayment:
-        """Retrieve an existing payment at Mollie, or raise a PayemntError"""
-        if not payment.transaction_id:
-            raise PaymentError(_("Mollie payment id is unknown"))
-
-        try:
-            mollie_payment = self.client.payments.get(payment.transaction_id)
-        except MollieError as exc:
-            payment.change_status(PaymentStatus.ERROR, str(exc))
-            raise PaymentError(
-                _("Failed to retrieve payment"),
-                gateway_message=str(exc),
-            )
-
-        return mollie_payment
-
-    def _create_mollie_billing_address(self, payment: BasePayment) -> Dict[str, str]:
-        """
-        Generate a Billing adress object from the payment data.
-
-        Note: some address details are required by the Mollie API when providing a
-        billing address. If you don't provide all required details (e.g. address,
-        city and country code), no billing address will be generated or submitted
-        to Mollie.
-
-        See Mollie docs for details:
-        https://docs.mollie.com/overview/common-data-types#address-object
-        """
-        result = {}
-
-        # Check if all required address details are available
-        if not (
-            payment.billing_address_1
-            and payment.billing_city
-            and payment.billing_country_code
-        ):
-            # Check if some address details are set
             if (
-                payment.billing_address_1
-                or payment.billing_city
-                or payment.billing_country_code
+                next_status == PaymentStatus.CONFIRMED
+                and "captured_amount" not in payment_updates
             ):
-                warnings.warn(
-                    "Some billing address details are set in the payment object, but "
-                    "not enough to fulfill Mollie requirements, omitting the billing "
-                    "address from the payment request",
-                    UserWarning,
-                )
+                payment_updates["captured_amount"] = payment.total
 
-            return {}
+        if payment_updates:
+            self.update_payment(payment.id, **payment_updates)
 
-        if payment.billing_address_1:
-            result["streetAndNumber"] = payment.billing_address_1
-
-        if payment.billing_address_2 and result["streetAndNumber"]:
-            result["streetAndNumber"] += f" {payment.billing_address_2}"  # add a space
-
-        if payment.billing_postcode:
-            result["postalCode"] = payment.billing_postcode
-
-        if payment.billing_city:
-            result["city"] = payment.billing_city
-
-        if payment.billing_country_area:
-            result["region"] = payment.billing_country_area
-
-        if payment.billing_country_code:
-            result["country"] = payment.billing_country_code
-
-        return result
+        if request.method == "POST":
+            # Return a HTTP 200 to the Mollie webhook
+            return HttpResponse(b"webhook processed")
+        else:
+            # The request was a user getting redirected after a payment
+            if next_status in (PaymentStatus.CONFIRMED, PaymentStatus.PREAUTH):
+                return redirect(payment.get_success_url())
+            else:
+                return redirect(payment.get_failure_url())

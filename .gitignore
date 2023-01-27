@@ -1,5 +1,6 @@
 **/__pycache__
 .coverage
+.envrc
 .mypy_cache/
 .pytest_cache/
 .tox/
