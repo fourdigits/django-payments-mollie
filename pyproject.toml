@@ -49,13 +49,12 @@ Issues = "https://github.com/fourdigits/django-payments-mollie/issues"
 Source = "https://github.com/fourdigits/django-payments-mollie"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "testproject.test_settings"
-pythonpath = ". testproject"
+DJANGO_SETTINGS_MODULE = "tests.django_settings"
 addopts = "--cov=django_payments_mollie/ --cov-branch --cov-report=term-missing --cov-report=xml"
 
 [tool.isort]
 profile = "black"
-src_paths = ["django_payments_mollie", "tests", "testproject"]
+src_paths = ["django_payments_mollie", "tests", "sandbox"]
 
 [tool.mypy]
 strict = true
