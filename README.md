@@ -11,6 +11,7 @@ Django Payments Mollie is a Django app that adds support for the [Mollie payment
 
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Sandbox](#sandbox)
 - [License](#license)
 
 ## Installation
@@ -62,6 +63,9 @@ class Payment(BaseMolliePayment):
     # Add custom fields and methods
 ```
 
+## Sandbox
+
+The project contains a sandbox that shows a very simple implementation of Django Payments with the Mollie payment variant. You can use it to see how implementation could be done, or to actually run an application against your own Mollie account. See the [Sandbox README](sandbox/README.md) for details.
 
 ## License
 
