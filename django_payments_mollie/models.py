@@ -38,3 +38,6 @@ class BaseMolliePayment(BasePayment):  # type: ignore[misc]
         """Enforce validation of fields required by Mollie upon save."""
         self.validate_mollie_required_fields(update_fields)
         super().save(*args, update_fields=update_fields, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.currency} {self.total} ({self.status})"
