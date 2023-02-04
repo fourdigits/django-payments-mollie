@@ -1,9 +1,10 @@
 **/__pycache__
 .coverage
+.envrc
 .mypy_cache/
 .pytest_cache/
 .tox/
 coverage.xml
 dist/
 env/
-testproject/db.sqlite3
+sandbox/db.sqlite3

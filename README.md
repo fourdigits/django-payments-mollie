@@ -5,9 +5,13 @@
 
 -----
 
+Django Payments Mollie is a Django app that adds support for the [Mollie payment provider](https://www.mollie.com) to [Django Payments](https://django-payments.readthedocs.io/).
+
 **Table of Contents**
 
 - [Installation](#installation)
+- [Configuration](#configuration)
+- [Sandbox](#sandbox)
 - [License](#license)
 
 ## Installation
@@ -15,6 +19,53 @@
 ```console
 pip install django-payments-mollie
 ```
+
+## Configuration
+
+You should follow the configration guide in the Django Payments documentation. To setup this package as a payment variant, use the following `PAYMENT_VARIANTS` in the Django settings file:
+
+```python
+PAYMENT_VARIANTS = {
+    "mollie": (
+        "django_payments_mollie.provider.MollieProvider",
+        {
+            # For api key authentication
+            "api_key": "test_example-api-key",
+
+            # For access token authentication
+            "access_token": "access_example-token",
+            "testmode": True,
+
+            # For OAuth2 authentication
+            "client_id": "example-client-id",
+            "client_secret": "example-client-secret",
+            "testmode": True,
+        }
+    )
+}
+```
+
+### Available configuration options
+
+- `api_key`: A [Mollie API key](https://docs.mollie.com/overview/authentication#creating-api-keys), this is the simplest way to configure access to the Mollie API. Use the test key for development or testing. This also allows you to use payment methods that aren't enabled for live payments yet.
+
+### Configuration helpers
+
+#### Payment model
+
+Django Payments docs will instruct you to create a Payment model that subclasses `BasePayment`. This package also provides a base model that you can use (optionally). The abstract model class `BaseMolliePayment` is a subclass of `BasePayment`, and it configures some of the fields as `required=True`, since Mollie requires them to be filled. Use it just like you would use Django payments' `BasePayment`:
+
+```python
+from django_mollie_payments.models import BaseMolliePayment
+
+class Payment(BaseMolliePayment):
+    ...
+    # Add custom fields and methods
+```
+
+## Sandbox
+
+The project contains a sandbox that shows a very simple implementation of Django Payments with the Mollie payment variant. You can use it to see how implementation could be done, or to actually run an application against your own Mollie account. See the [Sandbox README](sandbox/README.md) for details.
 
 ## License
 
