@@ -143,7 +143,7 @@ class Facade:
         payload = {
             "amount": {
                 "currency": payment.currency,
-                "value": str(payment.total),
+                "value": "{:.2f}".format(payment.total),
             },
             "description": payment.description,
             "redirectUrl": return_url,
