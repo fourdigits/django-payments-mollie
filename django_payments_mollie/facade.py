@@ -89,10 +89,10 @@ class Facade:
         if mollie_payment.is_paid():  # type: ignore[no-untyped-call]
             next_status = PaymentStatus.CONFIRMED
             if mollie_payment.amount_captured:
-                payment_updates[
-                    "captured_amount"
-                ] = Decimal(  # type:ignore[assignment]  # django-payments has a str default on the decimal field  # noqa: E501
-                    mollie_payment.amount_captured["value"]
+                payment_updates["captured_amount"] = (
+                    Decimal(  # type: ignore[assignment]  # django-payments has a str default on the decimal field  # noqa: E501
+                        mollie_payment.amount_captured["value"]
+                    )
                 )
 
         elif mollie_payment.is_canceled() or mollie_payment.is_expired():  # type: ignore[no-untyped-call]  # noqa: E501
